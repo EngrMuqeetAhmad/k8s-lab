@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+
+metadata:
+  name: nestjs-ingress
+  namespace: backend
+
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: k8s.lab.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+
+        backend:
+          service:
+            name: nestjs-service
+            port:
+              number: 80
+
+
+
