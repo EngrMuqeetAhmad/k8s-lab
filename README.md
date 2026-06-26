@@ -298,12 +298,25 @@ Install the Pod Network.
 
 Official Documentation
 
-https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#pod-network
+https://docs.tigera.io/calico/latest/getting-started/kubernetes/self-managed-onprem/onpremises
 
 This project uses:
 
-* Calico
+* Calico 
 
+
+Download the Calico networking manifest for the Kubernetes API datastore.
+
+```bash
+curl https://raw.githubusercontent.com/projectcalico/calico/v3.32.0/manifests/calico.yaml -O
+```
+
+
+Apply the manifest using the following command.
+
+```bash
+kubectl apply -f calico.yaml
+```
 Verify:
 
 ```bash
@@ -350,22 +363,15 @@ kubectl get nodes
 
 # Step 10 — Install NGINX Ingress Controller
 
+![Alt  ingress controller diagram](./assets/ingress-controller.png)
+
 Install the NGINX Ingress Controller.
 
 Since this cluster runs on a local network without a cloud provider, the Ingress Controller is exposed using a **NodePort Service**.
 
-Traffic Flow
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
 
-```
-Client
-   |
-NodePort
-   |
-NGINX Ingress
-   |
-ClusterIP Service
-   |
-Pods
 ```
 
 ---
@@ -457,6 +463,18 @@ kubectl get nodes
 ```
 
 ---
+
+# Access Application
+
+```bash
+$ kubectl get svc -n ingress-nginx
+NAME                                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                      AGE
+ingress-nginx-controller             NodePort    10.108.171.106   <none>        80:31017/TCP,443:31015/TCP   5m7s
+ingress-nginx-controller-admission   ClusterIP   10.96.226.164    <none>        443/TCP                      5m7s
+
+```
+
+Access on `machine-ip:31017`
 
 # Networking Flow
 
