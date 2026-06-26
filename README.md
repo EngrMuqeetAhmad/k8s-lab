@@ -167,6 +167,19 @@ containerd --version
 
 ---
 
+# Installing CNI plugins
+
+Download the cni-plugins-<OS>-<ARCH>-<VERSION>.tgz archive from https://github.com/containernetworking/plugins/releases
+
+extract it under /opt/cni/bin:
+```
+$ mkdir -p /opt/cni/bin
+$ sudo tar Cxzvf /opt/cni/bin cni-plugins-<OS>-<ARCH>-<VERSION>.tgz
+```
+
+---
+
+
 # Step 2 — Install runc
 
 Install the OCI runtime.
