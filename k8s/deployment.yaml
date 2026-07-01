@@ -21,8 +21,15 @@ spec:
       containers:
       - name: nestjs-api
 
-        image: engrmuqeetahmad/k8s:nest-health1
-        imagePullPolicy: IfNotPresent
+        image: engrmuqeetahmad/k8s:configmap-secret
+        imagePullPolicy: Always
+        
+        envFrom:
+        - configMapRef:
+            name: backend-config
+
+        - secretRef:
+            name: backend-secret
 
         ports:
         - containerPort: 3000
