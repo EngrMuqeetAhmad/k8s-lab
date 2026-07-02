@@ -3,12 +3,11 @@ kind: Ingress
 
 metadata:
   name: nestjs-ingress
-  namespace: backend
 
 spec:
   ingressClassName: nginx
   rules:
-  - host: k8s.lab.local
+  - host: placeholder
     http:
       paths:
       - path: /

@@ -1,0 +1,20 @@
+namespace: backend-dev
+resources:
+- ../../base
+
+configMapGenerator:
+  - name: backend-config
+    envs:
+      - config.env
+
+secretGenerator:
+  - name: backend-secret
+    envs:
+      - secret.env
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+namePrefix: dev-
+patches:
+- path: ingress-patch.yaml

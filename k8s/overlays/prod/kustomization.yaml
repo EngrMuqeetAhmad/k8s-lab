@@ -1,0 +1,25 @@
+namespace: backend-prod
+resources:
+- ../../base
+
+configMapGenerator:
+  - name: backend-config
+    envs:
+      - config.env
+
+secretGenerator:
+  - name: backend-secret
+    envs:
+      - secret.env
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+
+replicas:
+- name: nestjs-api
+  count: 1
+
+
+patches:
+- path: ingress-patch.yaml

@@ -3,10 +3,10 @@ kind: Deployment
 
 metadata:
   name: nestjs-api
-  namespace: backend
+
 
 spec:
-  replicas: 2
+  replicas: 1
 
   selector:
     matchLabels:
@@ -29,7 +29,7 @@ spec:
             name: backend-config
 
         - secretRef:
-            name: backend-secret
+            name: backend-secret        
 
         ports:
         - containerPort: 3000
