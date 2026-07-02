@@ -1,408 +1,165 @@
-# Kubernetes Lab - Lab 01
+# Kubernetes Lab 03 — ConfigMaps & Secrets
 
-### Building a Basic Kubernetes Cluster with kubeadm
+In this lab, you'll learn how to externalize application configuration using **ConfigMaps** and **Secrets**. Instead of hardcoding configuration values inside your application or container image, Kubernetes allows you to inject them at deployment time.
 
-This repository contains the first lab of the **Kubernetes Lab Series**.
-
-The purpose of this lab is to build a **production-style Kubernetes cluster from scratch** using **kubeadm**, deploy a simple **NestJS** application, and expose it over a Local Area Network (LAN) using **NGINX Ingress Controller**.
-
-Unlike lightweight Kubernetes distributions such as Minikube or k3s, this lab focuses on understanding the individual components that make up a Kubernetes cluster.
+This lab builds upon the cluster created in the previous labs and updates the NestJS deployment to consume configuration from Kubernetes resources.
 
 ---
 
-# Architecture
+# Learning Objectives
 
-```
-                Client (Browser)
-                       |
-                       |
-                 LAN Network
-                       |
-                +----------------+
-                | Master Node    |
-                |----------------|
-                | kube-apiserver |
-                | etcd           |
-                | scheduler      |
-                | controller     |
-                | kubelet        |
-                | containerd     |
-                | nginx ingress  |
-                +----------------+
-                       |
-          ------------------------------
-          |                            |
-          |                            |
- +-------------------+       +-------------------+
- | Worker Node       |       | Worker Node       |
- |-------------------|       |-------------------|
- | kubelet           |       | kubelet           |
- | containerd        |       | containerd        |
- | Calico            |       | Calico            |
- +-------------------+       +-------------------+
+After completing this lab, you will understand:
 
-```
-
-Pods communicate through the **Calico CNI**, while external traffic enters through the **NGINX Ingress Controller**, which routes requests to ClusterIP services.
-
----
-
-# Objectives
-
-In this lab you will learn how to:
-
-* Install and configure containerd
-* Install runc
-* Install nerdctl
-* Install BuildKit
-* Configure containerd as the Kubernetes CRI
-* Install kubeadm, kubelet, and kubectl
-* Bootstrap a Kubernetes cluster
-* Join worker nodes
-* Install Calico CNI
-* Remove the default control-plane taint (for small labs)
-* Build and run a NestJS application
-* Deploy the application to Kubernetes
-* Expose the application through a ClusterIP Service
-* Access the application using NGINX Ingress over LAN
-
----
-
-# Technologies Used
-
-| Component                | Purpose                              |
-| ------------------------ | ------------------------------------ |
-| Kubernetes               | Container orchestration              |
-| kubeadm                  | Cluster bootstrap                    |
-| kubelet                  | Node agent                           |
-| kubectl                  | Kubernetes CLI                       |
-| containerd               | Container Runtime (CRI)              |
-| runc                     | OCI Runtime                          |
-| nerdctl                  | Docker-compatible CLI for containerd |
-| BuildKit                 | Image building                       |
-| Calico                   | CNI Plugin                           |
-| NGINX Ingress Controller | Ingress / Load Balancer              |
-| SSH                      | Remote node management               |
-| NestJS                   | Sample application                   |
-
----
-
-# Cluster Configuration
-
-* Kubernetes installed using **kubeadm**
-* **containerd** as the Container Runtime
-* **runc** as OCI runtime
-* **Calico** networking
-* **NGINX Ingress Controller**
-* ClusterIP Services
-* Access over Local Area Network
-* Control Plane scheduling enabled (taint removed)
-
----
-
-# Repository Structure
-
-As it is a simple one application deploymentm, we are going to keep the structure simple.
-
-```
-k8s-lab/
-  ├── Dockerfile
-  ├── eslint.config.mjs
-  ├── k8s
-      │
-      ├── namespace.yaml
-      ├── deployment.yaml
-      ├── service.yaml
-      ├── ingress.yaml
-  ├── nest-cli.json
-  ├── node_modules
-  ├── package.json
-  ├── package-lock.json
-  ├── README.md
-  ├── src
-  ├── test
-  ├── tsconfig.build.json
-  └── tsconfig.json
-  └── README.md
-```
+* What ConfigMaps are
+* What Secrets are
+* The difference between ConfigMaps and Secrets
+* When to use each resource
+* How to inject configuration into Pods
+* How Kubernetes separates application code from configuration
+* How to deploy applications using ConfigMaps and Secrets
 
 ---
 
 # Prerequisites
 
-At least 1 Linux machines. 2 is recommended
->> if you have only 1 machine, then step 8 is a must otherwise optional
+Before starting this lab, complete:
 
-Example:
+* **Lab 01** – Kubernetes Cluster with kubeadm
+* **Lab 02** – Deploying a NestJS Application
 
-| Machine | Role          |
-| ------- | ------------- |
-| Master  | Control Plane |
-| Worker  | Worker Node   |
+You should already have:
 
-Requirements
-
-* Ubuntu 22.04+ (recommended)
-* Static IPs
-* SSH access
-* Internet connection
-* Swap disabled
-* Required kernel modules enabled
+* A working Kubernetes cluster
+* NGINX Ingress Controller
+* Calico CNI
+* kubectl configured
+* A running NestJS application
 
 ---
 
-# Step 1 — Install containerd
-
-Install containerd following the official guide.
-
-Official Documentation
-
-https://github.com/containerd/containerd/blob/main/docs/getting-started.md
-
-After installation, verify:
+# Checkout the Lab
 
 ```bash
-containerd --version
+git checkout k8s-lab-3-configMap-secrets
 ```
 
----
-
-# Installing CNI plugins
-
-Download the cni-plugins-<OS>-<ARCH>-<VERSION>.tgz archive from https://github.com/containernetworking/plugins/releases
-
-extract it under /opt/cni/bin:
-```
-$ mkdir -p /opt/cni/bin
-$ sudo tar Cxzvf /opt/cni/bin cni-plugins-<OS>-<ARCH>-<VERSION>.tgz
-```
-
----
-
-
-# Step 2 — Install runc
-
-Install the OCI runtime.
-
-Official Releases
-
-https://github.com/opencontainers/runc/releases
-
-Verify
+Navigate to the Kubernetes manifests.
 
 ```bash
-runc --version
-```
-
----
-
-# Step 3 — Install nerdctl and BuildKit
-
-Install the Docker-compatible CLI for containerd.
-
-Documentation
-
-https://github.com/containerd/nerdctl
-
-Releases
-
-https://github.com/containerd/nerdctl/releases
-
-Verify
-
-```bash
-nerdctl --version
-buildctl --version
-```
-
----
-
-# Step 4 — Configure containerd for Kubernetes
-https://kubernetes.io/docs/setup/production-environment/container-runtimes/#containerd
-
-Generate the default configuration.
-
-```bash
-sudo mkdir -p /etc/containerd
-sudo containerd config default | sudo tee /etc/containerd/config.toml
-sudo nano /etc/containerd/config.toml
-```
-
-Find
-`SystemdCgroup` and make it true
-
-After edit:
-`SystemdCgroup = true`
-
-Restart containerd.
-
-```bash
-sudo systemctl restart containerd
-```
-
-Configure the runtime according to the Kubernetes documentation.
-
----
-
-# Step 5 — Install Kubernetes Components
-
-Install
-
-* kubeadm
-* kubelet
-* kubectl
-
-Official Documentation
-
-https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
-
-Verify
-
-```bash
-kubeadm version
-kubectl version --client
-kubelet --version
-```
-
----
-
-# Step 6 — Initialize the Cluster
-
-Prepare the host according to the kubeadm documentation.
-
-Official Guide
-
-https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
-
-Initialize:
-
-```bash
-sudo kubeadm init
-```
-
-Configure kubectl:
-
-```bash
-mkdir -p $HOME/.kube
-
-sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
-
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
-```
-
----
-
-# Step 7 — Install Calico CNI
-
-Install the Pod Network.
-
-Official Documentation
-
-https://docs.tigera.io/calico/latest/getting-started/kubernetes/self-managed-onprem/onpremises
-
-This project uses:
-
-* Calico 
-
-
-Download the Calico networking manifest for the Kubernetes API datastore.
-
-```bash
-curl https://raw.githubusercontent.com/projectcalico/calico/v3.32.0/manifests/calico.yaml -O
-```
-
-
-Apply the manifest using the following command.
-
-```bash
-kubectl apply -f calico.yaml
-```
-Verify:
-
-```bash
-kubectl get pods -A
-```
-
----
-
-# Step 8 — Allow Pods on the Control Plane (Optional)
-
-For a small development cluster, remove the default taint.
-
-```bash
-kubectl taint nodes --all node-role.kubernetes.io/control-plane-
-```
-
-Now workloads can also run on the master node.
-
-> **Note:** This is recommended only for learning and development environments. In production, keep the control plane dedicated to cluster management.
-
----
-
-# Step 9 — Join Worker Nodes
-
-SSH into each worker node.
-
-Run the join command generated during `kubeadm init`.
-
-Example
-
-```bash
-sudo kubeadm join <master-ip>:6443 \
---token <token> \
---discovery-token-ca-cert-hash sha256:<hash>
-```
-
-Verify
-
-```bash
-kubectl get nodes
-```
-
----
-
-# Step 10 — Install NGINX Ingress Controller
-
-![Alt  ingress controller diagram](./assets/ingress-controller.png)
-
-Install the NGINX Ingress Controller.
-
-Since this cluster runs on a local network without a cloud provider, the Ingress Controller is exposed using a **NodePort Service**.
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
-
-```
-
----
-
-# Step 11 — Build the NestJS Image
-
-Build using nerdctl.
-
-Example
-
-```bash
-nerdctl build -t nestapi:v1 .
-```
-
-Verify
-
-```bash
-nerdctl images
-```
-
----
-
-# Step 12 — Deploy the Application
-
-Clone the repository.
-
-```bash
-git clone <repository-url>
-
 cd k8s
 ```
+
+Repository structure:
+
+```text
+k8s/
+├── backend-config-map.yaml
+├── backend-secret.yaml
+├── deployment.yaml
+├── service.yaml
+├── ingress.yaml
+├── namespace.yaml
+└── metallb-config.yaml   # Optional
+```
+
+---
+
+# Understanding ConfigMaps
+
+A **ConfigMap** stores non-sensitive configuration that your application needs at runtime.
+
+Examples include:
+
+* Environment
+* Port numbers
+* Feature flags
+* API URLs
+* Application settings
+
+In this lab, the ConfigMap contains:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: backend-config
+  namespace: backend
+
+data:
+  PORT: "3000"
+  ENVIRONMENT: "development"
+```
+
+This allows the application to read:
+
+* PORT
+* ENVIRONMENT
+
+without hardcoding these values inside the container image.
+
+---
+
+# Understanding Secrets
+
+A **Secret** stores sensitive configuration.
+
+Typical examples:
+
+* Database credentials
+* API keys
+* OAuth tokens
+* JWT secrets
+* TLS certificates
+
+In this lab we define:
+
+```yaml
+apiVersion: v1
+kind: Secret
+
+metadata:
+  name: backend-secret
+  namespace: backend
+
+type: Opaque
+
+stringData:
+  DB_USER: postgres
+  DB_PASSWORD: "123"
+```
+
+The Secret provides:
+
+* DB_USER
+* DB_PASSWORD
+
+to the application.
+
+> **Note:** Secrets are Base64-encoded by Kubernetes. This is **not encryption**. For production workloads, consider enabling encryption at rest and integrating with an external secrets manager such as HashiCorp Vault or your cloud provider's secret management service.
+
+---
+
+# Updating the Deployment
+
+The Deployment has been updated to use the new image:
+
+```text
+k8s:configmap-secret
+```
+
+It now loads configuration from both:
+
+* ConfigMap
+* Secret
+
+at runtime.
+
+This keeps the application image environment-agnostic and reusable across development, staging, and production.
+
+---
+
+# Deploy the Resources
 
 Create the namespace.
 
@@ -410,10 +167,16 @@ Create the namespace.
 kubectl apply -f namespace.yaml
 ```
 
-Create the service.
+Create the ConfigMap.
 
 ```bash
-kubectl apply -f service.yaml
+kubectl apply -f backend-config-map.yaml
+```
+
+Create the Secret.
+
+```bash
+kubectl apply -f backend-secret.yaml
 ```
 
 Deploy the application.
@@ -422,108 +185,113 @@ Deploy the application.
 kubectl apply -f deployment.yaml
 ```
 
-Create the ingress.
+Create the Service.
+
+```bash
+kubectl apply -f service.yaml
+```
+
+Create the Ingress.
 
 ```bash
 kubectl apply -f ingress.yaml
 ```
 
----
-
-# Verify the Deployment
-
-Pods
+> **Optional:** If you are using MetalLB in your lab environment, you can also apply:
 
 ```bash
-kubectl get pods -A
-```
-
-Deployments
-
-```bash
-kubectl get deployments
-```
-
-Services
-
-```bash
-kubectl get svc
-```
-
-Ingress
-
-```bash
-kubectl get ingress
-```
-
-Nodes
-
-```bash
-kubectl get nodes
+kubectl apply -f metallb-config.yaml
 ```
 
 ---
 
-# Access Application
+# Verify the Resources
+
+List ConfigMaps.
 
 ```bash
-$ kubectl get svc -n ingress-nginx
-NAME                                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                      AGE
-ingress-nginx-controller             NodePort    10.108.171.106   <none>        80:31017/TCP,443:31015/TCP   5m7s
-ingress-nginx-controller-admission   ClusterIP   10.96.226.164    <none>        443/TCP                      5m7s
-
+kubectl get configmaps
 ```
 
-Access on `machine-ip:31017`
+List Secrets.
 
-# Networking Flow
-
-```
-Browser
-   |
-   v
-Node IP
-   |
-NodePort
-   |
-NGINX Ingress Controller
-   |
-ClusterIP Service
-   |
-Deployment
-   |
-Pods
+```bash
+kubectl get secrets
 ```
 
----
+View the ConfigMap.
 
-# Useful Commands
+```bash
+kubectl describe configmap backend-config
+```
 
-View Pods
+View the Secret metadata.
+
+```bash
+kubectl describe secret backend-secret
+```
+
+View Pods.
 
 ```bash
 kubectl get pods
 ```
 
-Describe Pod
+View Deployment.
 
 ```bash
-kubectl describe pod <pod-name>
+kubectl get deployment
 ```
 
-View Logs
+---
+
+# Verify Environment Variables
+
+Find your Pod.
 
 ```bash
-kubectl logs <pod-name>
+kubectl get pods
 ```
 
-Restart Deployment
+Open a shell inside the container.
 
 ```bash
-kubectl rollout restart deployment <deployment-name>
+kubectl exec -it <pod-name> -- sh
 ```
 
-Delete Everything
+Print the injected environment variables.
+
+```bash
+env | grep PORT
+env | grep ENVIRONMENT
+env | grep DB_USER
+env | grep DB_PASSWORD
+```
+
+You should see the values coming from the ConfigMap and Secret.
+
+---
+
+# Why Use ConfigMaps and Secrets?
+
+Without ConfigMaps and Secrets:
+
+* Every environment requires rebuilding the container image.
+* Configuration is tightly coupled with the application.
+* Sensitive data may end up in source control.
+
+With ConfigMaps and Secrets:
+
+* One container image can be deployed everywhere.
+* Configuration is managed independently.
+* Sensitive values are isolated from application code.
+* Deployments become more portable and maintainable.
+
+---
+
+# Cleanup
+
+Remove all resources.
 
 ```bash
 kubectl delete -f .
@@ -531,41 +299,20 @@ kubectl delete -f .
 
 ---
 
-# Learning Outcomes
+# What You Learned
 
-After completing this lab, you should understand:
+In this lab you learned how to:
 
-* Kubernetes architecture
-* kubeadm cluster initialization
-* Container Runtime Interface (CRI)
-* OCI runtimes
-* Pod networking
-* Calico CNI
-* Deployments
-* Services
-* Ingress
-* ClusterIP networking
-* NGINX Ingress
-* Building container images with BuildKit and nerdctl
-* Multi-node Kubernetes clusters
-
+* Create ConfigMaps
+* Create Secrets
+* Separate configuration from application code
+* Inject environment variables into Pods
+* Deploy applications using external configuration
+* Follow Kubernetes configuration best practices
 
 ---
 
-# References
+References
 
-* Kubernetes Documentation
-* kubeadm Documentation
-* containerd Documentation
-* nerdctl Documentation
-* BuildKit Documentation
-* Calico Documentation
-* NGINX Ingress Documentation
-
----
-
-# License
-
-This repository is intended for educational and learning purposes.
-
-Feel free to fork, experiment, and build upon it.
+* Kubernetes ConfigMaps Documentation
+* Kubernetes Secrets Documentation

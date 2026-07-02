@@ -22,7 +22,7 @@ spec:
       - name: nestjs-api
 
         image: engrmuqeetahmad/k8s:configmap-secret
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         
         envFrom:
         - configMapRef:
